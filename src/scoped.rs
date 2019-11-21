@@ -112,7 +112,7 @@ pub struct Hole<'c, 'm, T: 'm, F: FnOnce() -> T> {
 
 impl<'c, 'm, T: 'm, F: FnOnce() -> T> Hole<'c, 'm, T, F> {
     /// Fills the Hole.
-    pub fn fill(self, t: T) {
+    pub fn fill(mut self, t: T) {
         use std::ptr;
         use std::mem;
         
@@ -121,7 +121,13 @@ impl<'c, 'm, T: 'm, F: FnOnce() -> T> Hole<'c, 'm, T, F> {
         }
         let num_holes = self.active_holes.get();
         self.active_holes.set(num_holes - 1);
+        // The recovery is the only thing that *might* have a destructor to run. Make sure it is
+        // not forgotten.
+        let recovery = self.recovery.take();
         mem::forget(self);
+        // But destroy it after getting rid of self. Otherwise panic in it might trigger destructor
+        // of us after we already filled the hole which would probably do very weird things.
+        drop(recovery);
     }
 }
 
